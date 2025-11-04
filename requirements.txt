@@ -1,7 +1,12 @@
-dash
-plotly
-flask
+# Core Python libraries
 pandas
 paho-mqtt
+dash
 dash-bootstrap-components
+plotly
+
+# PostgreSQL database driver
+psycopg2-binary
+
+# Other utilities
 gunicorn
