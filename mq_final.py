@@ -49,12 +49,18 @@ from psycopg2 import sql
 from dash import Dash
 import dash_bootstrap_components as dbc
  
+import os
+import psycopg2
+import pandas as pd
+from psycopg2 import sql
+
 # ================== DATABASE CONFIG ==================
-db_user = "postgres"
-db_password = "Pratik@123"
-db_host = "localhost"
-db_port = "5432"
-db_name = "postgres"
+db_user = os.getenv("DB_USER", "postgres")
+db_password = os.getenv("DB_PASSWORD", "Pratik@123")
+db_host = os.getenv("DB_HOST", "localhost")
+db_port = os.getenv("DB_PORT", "5432")
+db_name = os.getenv("DB_NAME", "postgres")
+
 main_table_name = "JJJ_Site"
 new_entries_table_name = "JJM_New_Entries"
 user_login_table = "login_access"
@@ -64,12 +70,11 @@ LOGO_PATH = r"C:\Users\12797\Music\Data Link MONTh\Screenshot 2025-09-10 170918.
 
 # ================== MQTT CONFIG ==================
 BROKER = "14.99.99.166"
-PORT = 1889
+PORT = 1889  # Change to 1883 if your broker uses the default MQTT port
 USERNAME = "MQTT"
 PASSWORD = "Mqtt@123"
 
 # ================== LOGIN CONFIG ==================
-# User activity tracking
 user_activity_log = []
 
 # Columns
@@ -85,17 +90,13 @@ COL_CIRCLE = "Circle"
 COL_DIVISION = "Division"
 COL_SUBDIVISION = "Sub Division"
 COL_SR_NO = "Sr.No"
-COL_POPULATION = "Population"  # New Population column
-# Columns - Status columns
+COL_POPULATION = "Population"
 COL_FLOW_STATUS = "Flow"
 COL_CL_STATUS = "Chlorin"
 COL_PRESSURE_STATUS = "Pressure"
-COL_STUDY = "Study"  # New Study column
+COL_STUDY = "Study"
 
-# UI refresh interval
 UI_REFRESH_MS = 3000
-
-# Pressure sensor settings
 PRESSURE_UPDATE_HOURS = 12
 
 # ================== DATABASE FUNCTIONS ==================
@@ -114,6 +115,7 @@ def get_db_connection():
         print(f"Database connection error: {e}")
         return None
 
+
 def create_new_entries_table():
     """Create the new entries table if it doesn't exist"""
     conn = get_db_connection()
@@ -122,7 +124,6 @@ def create_new_entries_table():
 
     try:
         cursor = conn.cursor()
-
         create_table_query = f'''
         CREATE TABLE IF NOT EXISTS "{new_entries_table_name}" (
             "{COL_SR_NO}" TEXT,
@@ -148,10 +149,9 @@ def create_new_entries_table():
             "Added Date" TEXT
         )
         '''
-
         cursor.execute(create_table_query)
         conn.commit()
-        print(f"Table {new_entries_table_name} created or already exists")
+        print(f"✅ Table '{new_entries_table_name}' created or already exists.")
         return True
 
     except Exception as e:
@@ -161,6 +161,7 @@ def create_new_entries_table():
     finally:
         conn.close()
 
+
 def load_data_from_db(table_name):
     """Load data from PostgreSQL table into DataFrame"""
     conn = get_db_connection()
@@ -168,21 +169,17 @@ def load_data_from_db(table_name):
         return pd.DataFrame()
 
     try:
-        # For new entries table, ensure it exists first
         if table_name == new_entries_table_name:
             create_new_entries_table()
 
-        # Convert SQL object to string for pandas
-        query = sql.SQL("SELECT * FROM {}").format(sql.Identifier(table_name))
-        query_str = query.as_string(conn)
-
-        df = pd.read_sql_query(query_str, conn)
+        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
         return df
     except Exception as e:
         print(f"Error loading data from {table_name}: {e}")
         return pd.DataFrame()
     finally:
         conn.close()
+
 
 def save_new_entry_to_db(entry_data):
     """Save new entry to the new entries table"""
@@ -192,33 +189,23 @@ def save_new_entry_to_db(entry_data):
 
     try:
         cursor = conn.cursor()
-
-        # Ensure table exists
         create_new_entries_table()
 
-        # Get the next SR No
         cursor.execute(f'SELECT MAX("{COL_SR_NO}") FROM "{new_entries_table_name}"')
         max_sr_no_result = cursor.fetchone()[0]
+        next_sr_no = int(max_sr_no_result) + 1 if max_sr_no_result and str(max_sr_no_result).isdigit() else 1
 
-        # Handle None or non-digit values
-        if max_sr_no_result is None or not str(max_sr_no_result).isdigit():
-            next_sr_no = 1
-        else:
-            next_sr_no = int(max_sr_no_result) + 1
-
-        # Prepare columns and values
         columns = [COL_SR_NO] + list(entry_data.keys())
         values = [str(next_sr_no)] + list(entry_data.values())
 
-        # Build INSERT query
         columns_str = ', '.join([f'"{col}"' for col in columns])
         placeholders = ', '.join(['%s'] * len(columns))
 
         insert_query = f'INSERT INTO "{new_entries_table_name}" ({columns_str}) VALUES ({placeholders})'
-
         cursor.execute(insert_query, values)
         conn.commit()
-        print(f"New entry saved with SR No: {next_sr_no}")
+
+        print(f"✅ New entry saved with SR No: {next_sr_no}")
         return True
 
     except Exception as e:
@@ -228,6 +215,7 @@ def save_new_entry_to_db(entry_data):
     finally:
         conn.close()
 
+
 def update_entry_in_db(entry_data):
     """Update existing entry in the new entries table"""
     conn = get_db_connection()
@@ -236,8 +224,6 @@ def update_entry_in_db(entry_data):
 
     try:
         cursor = conn.cursor()
-
-        # Build UPDATE query
         set_clause = []
         values = []
         sr_no = None
@@ -253,11 +239,11 @@ def update_entry_in_db(entry_data):
             return False
 
         values.append(sr_no)
-
         update_query = f'UPDATE "{new_entries_table_name}" SET {", ".join(set_clause)} WHERE "{COL_SR_NO}" = %s'
 
         cursor.execute(update_query, values)
         conn.commit()
+        print(f"✅ Entry with SR No {sr_no} updated.")
         return True
 
     except Exception as e:
@@ -266,6 +252,7 @@ def update_entry_in_db(entry_data):
         return False
     finally:
         conn.close()
+
 
 def delete_entry_from_db(sr_no):
     """Delete entry from the new entries table"""
@@ -276,9 +263,9 @@ def delete_entry_from_db(sr_no):
     try:
         cursor = conn.cursor()
         delete_query = f'DELETE FROM "{new_entries_table_name}" WHERE "{COL_SR_NO}" = %s'
-
         cursor.execute(delete_query, (sr_no,))
         conn.commit()
+        print(f"✅ Entry with SR No {sr_no} deleted.")
         return True
 
     except Exception as e:
@@ -288,6 +275,7 @@ def delete_entry_from_db(sr_no):
     finally:
         conn.close()
 
+
 def authenticate_user(username, password, user_type):
     """Authenticate user from database"""
     conn = get_db_connection()
@@ -296,21 +284,17 @@ def authenticate_user(username, password, user_type):
 
     try:
         cursor = conn.cursor()
-
-        if user_type == "admin":
-            table = admin_login_table
-        else:
-            table = user_login_table
+        table = admin_login_table if user_type == "admin" else user_login_table
 
         query = f'SELECT * FROM "{table}" WHERE "name" = %s AND "pass" = %s'
         cursor.execute(query, (username, password))
         user = cursor.fetchone()
 
         if user:
-            # Convert to dictionary with column names
             columns = [desc[0] for desc in cursor.description]
             user_dict = dict(zip(columns, user))
             user_dict['role'] = user_type
+            print(f"✅ User '{username}' authenticated as {user_type}.")
             return user_dict
         return None
 
@@ -320,6 +304,7 @@ def authenticate_user(username, password, user_type):
     finally:
         conn.close()
 
+
 def get_all_users():
     """Get all users for reference"""
     conn = get_db_connection()
@@ -328,42 +313,35 @@ def get_all_users():
 
     try:
         cursor = conn.cursor()
-
-        # Get regular users
         cursor.execute(f'SELECT "name", "mail", "region" FROM "{user_login_table}"')
         users = cursor.fetchall()
 
-        # Get admins
         cursor.execute(f'SELECT "name", "mail", "region" FROM "{admin_login_table}"')
         admins = cursor.fetchall()
 
-        user_list = []
+        all_users = [
+            {"username": u[0], "email": u[1], "region": u[2], "role": "user"} for u in users
+        ] + [
+            {"username": a[0], "email": a[1], "region": a[2], "role": "admin"} for a in admins
+        ]
 
-        # Add regular users
-        for user in users:
-            user_list.append({
-                "username": user[0],
-                "email": user[1],
-                "region": user[2],
-                "role": "user"
-            })
-
-        # Add admins
-        for admin in admins:
-            user_list.append({
-                "username": admin[0],
-                "email": admin[1],
-                "region": admin[2],
-                "role": "admin"
-            })
-
-        return user_list
+        print(f"✅ Loaded {len(all_users)} users.")
+        return all_users
 
     except Exception as e:
         print(f"Error getting users: {e}")
         return []
     finally:
         conn.close()
+
+
+# ================== STARTUP CHECK ==================
+if __name__ == "__main__":
+    print("🔍 Checking database setup...")
+    if create_new_entries_table():
+        print("✅ Database ready.")
+    else:
+        print("⚠️ Failed to verify or create tables.")
 
 # ================== HELPER FUNCTIONS ==================
 def normalize_topic(val):
