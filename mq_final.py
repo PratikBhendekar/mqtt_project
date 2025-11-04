@@ -22,6 +22,10 @@ from io import BytesIO
 import os
 import psycopg2
 from psycopg2 import sql
+from dash import Dash
+import dash_bootstrap_components as dbc
+
+
 
 # ================== DATABASE CONFIG ==================
 db_user = "postgres"
@@ -5247,6 +5251,8 @@ def update_reservoir_analytics(n, region, scheme, village, reservoir):
     return update_reservoir_analytics_internal(region, scheme, village, reservoir)
 
 # ================== RUN APP ==================
+server = app.server   # 👈 required for Render / Gunicorn
+
 if __name__ == "__main__":
     # Auto-create the new entries table on startup
     create_new_entries_table()
