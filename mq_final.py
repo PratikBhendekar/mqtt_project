@@ -22,11 +22,33 @@ from io import BytesIO
 import os
 import psycopg2
 from psycopg2 import sql
+import re
+import threading
+import time
+import socket
+import webbrowser
+import json
+from copy import deepcopy
+from datetime import datetime, timedelta
+import math
+import random
+
+import pandas as pd
+import paho.mqtt.client as mqtt
+from dash import Dash, dcc, html, dash_table, callback_context
+from dash.dependencies import Input, Output, State
+import dash_bootstrap_components as dbc
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import base64
+from io import BytesIO
+import os
+import psycopg2
+from psycopg2 import sql
 from dash import Dash
 import dash_bootstrap_components as dbc
-
-
-
+ 
 # ================== DATABASE CONFIG ==================
 db_user = "postgres"
 db_password = "Pratik@123"
@@ -391,11 +413,11 @@ def parse_payload_and_get_remarks(payload, cl_type=None, sensor_type=None):
                     # Consider data from last 12 hours as valid for pressure sensors
                     time_diff = now - dt
                     if time_diff.total_seconds() <= 43200:  # 12 hours in seconds
-                        return "YES ✅"
+                        return "YES [OK]"
                     else:
                         return f"YES (Data from {dt.strftime('%Y-%m-%d %H:%M')})"
                 elif has_valid_data:
-                    return "YES ✅ "
+                    return "YES [OK] "
                 else:
                     return "NO "
             else:
@@ -414,14 +436,14 @@ def parse_payload_and_get_remarks(payload, cl_type=None, sensor_type=None):
 
             # Special handling for 4-20 mA chlorine type
             if cl_type == "4-20 mA" and flow_error == "1" and cl_error == "1":
-                remarks.append("YES✅")
+                remarks.append("YES [OK]")
             elif flow_error is not None and cl_error is not None:
                 if flow_error == "1" and cl_error == "1":
                     remarks.append("NO")
                 elif flow_error == "1" and cl_error == "0":
-                    remarks.append("YES ✅")
+                    remarks.append("YES [OK]")
                 elif flow_error == "0" and cl_error == "1":
-                    remarks.append("YES ✅")
+                    remarks.append("YES [OK]")
                 elif flow_error == "0" and cl_error == "0":
                     remarks.append("NO")
                 else:
@@ -524,10 +546,10 @@ def subscribe_to_new_topic(topic):
             mqtt_client.subscribe(normalized_topic)
             if normalized_topic not in all_topics:
                 all_topics.append(normalized_topic)
-            print(f"✅ Successfully subscribed to new topic: {normalized_topic}")
+            print(f"Successfully subscribed to new topic: {normalized_topic}")
             return True
     except Exception as e:
-        print(f"❌ Error subscribing to new topic {topic}: {e}")
+        print(f"Error subscribing to new topic {topic}: {e}")
 
     return False
 
@@ -797,7 +819,7 @@ app.index_string = '''
 <html lang="en">
     <head>
         {%metas%}
-        <title>🌊 SWSM IoT Dashboard</title>
+        <title>SWSM IoT Dashboard</title>
         {%favicon%}
         {%css%}
         <style>
@@ -1127,17 +1149,17 @@ sidebar = html.Div([
         html.H5("", style={"color": "white", "marginBottom": "20px", "fontWeight": "bold", "textAlign": "center", "fontSize": "18px"}),
 
         dbc.Nav([
-            dbc.NavLink("📊 Dashboard", href="/", active="exact", className="enhanced-navlink", style={"color": "white", "padding": "15px", "borderRadius": "10px", "marginBottom": "10px", "fontWeight": "bold", "background": "rgba(255,255,255,0.1)", "transition": "all 0.3s ease", "fontSize": "15px"}),
-            dbc.NavLink("📈 Analysis", href="/analysis", active="exact", className="enhanced-navlink", style={"color": "white", "padding": "15px", "borderRadius": "10px", "marginBottom": "10px", "fontWeight": "bold", "background": "rgba(255,255,255,0.1)", "transition": "all 0.3s ease", "fontSize": "15px"}),
-            dbc.NavLink("➕ Add New Entry", href="/add-entry", active="exact", className="enhanced-navlink", style={"color": "white", "padding": "15px", "borderRadius": "10px", "marginBottom": "10px", "fontWeight": "bold", "background": "rgba(255,255,255,0.1)", "transition": "all 0.3s ease", "fontSize": "15px"}),
-            dbc.NavLink("📊 Reservoir Analytics", href="/reservoir-analytics", active="exact", className="enhanced-navlink", style={"color": "white", "padding": "15px", "borderRadius": "10px", "marginBottom": "10px", "fontWeight": "bold", "background": "rgba(255,255,255,0.1)", "transition": "all 0.3s ease", "fontSize": "15px"}),
+            dbc.NavLink("Dashboard", href="/", active="exact", className="enhanced-navlink", style={"color": "white", "padding": "15px", "borderRadius": "10px", "marginBottom": "10px", "fontWeight": "bold", "background": "rgba(255,255,255,0.1)", "transition": "all 0.3s ease", "fontSize": "15px"}),
+            dbc.NavLink("Analysis", href="/analysis", active="exact", className="enhanced-navlink", style={"color": "white", "padding": "15px", "borderRadius": "10px", "marginBottom": "10px", "fontWeight": "bold", "background": "rgba(255,255,255,0.1)", "transition": "all 0.3s ease", "fontSize": "15px"}),
+            dbc.NavLink("Add New Entry", href="/add-entry", active="exact", className="enhanced-navlink", style={"color": "white", "padding": "15px", "borderRadius": "10px", "marginBottom": "10px", "fontWeight": "bold", "background": "rgba(255,255,255,0.1)", "transition": "all 0.3s ease", "fontSize": "15px"}),
+            dbc.NavLink("Reservoir Analytics", href="/reservoir-analytics", active="exact", className="enhanced-navlink", style={"color": "white", "padding": "15px", "borderRadius": "10px", "marginBottom": "10px", "fontWeight": "bold", "background": "rgba(255,255,255,0.1)", "transition": "all 0.3s ease", "fontSize": "15px"}),
         ], vertical=True, pills=True),
 
         html.Hr(style={"borderColor": "rgba(255,255,255,0.3)", "margin": "20px 0"}),
 
         html.H5("", style={"color": "white", "marginBottom": "20px", "fontWeight": "bold", "textAlign": "center", "fontSize": "18px"}),
 
-        dbc.Label("🌍 Region", style={"color": "white", "fontWeight": "bold", "marginBottom": "8px", "fontSize": "14px"}),
+        dbc.Label("Region", style={"color": "white", "fontWeight": "bold", "marginBottom": "8px", "fontSize": "14px"}),
         dcc.Dropdown(
             id="region-dropdown",
             options=[{"label": s, "value": s} for s in sorted(base_df["Region"].unique())] if not base_df.empty else [],
@@ -1147,7 +1169,7 @@ sidebar = html.Div([
             style={"marginBottom": "20px", "borderRadius": "10px"}
         ),
 
-        dbc.Label("🏗️ Scheme", style={"color": "white", "fontWeight": "bold", "marginBottom": "8px", "fontSize": "14px"}),
+        dbc.Label("Scheme", style={"color": "white", "fontWeight": "bold", "marginBottom": "8px", "fontSize": "14px"}),
         dcc.Dropdown(
             id="scheme-dropdown",
             placeholder="Select Scheme",
@@ -1156,7 +1178,7 @@ sidebar = html.Div([
             style={"marginBottom": "20px", "borderRadius": "10px"}
         ),
 
-        dbc.Label("🏘️ Village", style={"color": "white", "fontWeight": "bold", "marginBottom": "8px", "fontSize": "14px"}),
+        dbc.Label("Village", style={"color": "white", "fontWeight": "bold", "marginBottom": "8px", "fontSize": "14px"}),
         dcc.Dropdown(
             id="village-dropdown",
             placeholder="Select Village",
@@ -1165,7 +1187,7 @@ sidebar = html.Div([
             style={"marginBottom": "20px", "borderRadius": "10px"}
         ),
 
-        dbc.Label("💧 Reservoir", style={"color": "white", "fontWeight": "bold", "marginBottom": "8px", "fontSize": "14px"}),
+        dbc.Label("Reservoir", style={"color": "white", "fontWeight": "bold", "marginBottom": "8px", "fontSize": "14px"}),
         dcc.Dropdown(
             id="reservoir-dropdown",
             placeholder="Select Reservoir",
@@ -1176,34 +1198,34 @@ sidebar = html.Div([
 
         html.Hr(style={"borderColor": "rgba(255,255,255,0.3)", "margin": "25px 0"}),
 
-        html.H6("📡 Connection Status", style={"color": "white", "marginBottom": "8px", "fontWeight": "bold", "fontSize": "16px"}),
+        html.H6("Connection Status", style={"color": "white", "marginBottom": "8px", "fontWeight": "bold", "fontSize": "16px"}),
         dbc.Badge("MQTT Connected", color="success", id="mqtt-status", className="pulse enhanced-badge", style={"marginBottom": "20px", "fontSize": "14px", "padding": "10px", "borderRadius": "20px", "width": "100%", "textAlign": "center"}),
 
-        html.H6("⏱️ Connection Duration", style={"color": "white", "marginBottom": "8px", "fontWeight": "bold", "fontSize": "16px"}),
+        html.H6("Connection Duration", style={"color": "white", "marginBottom": "8px", "fontWeight": "bold", "fontSize": "16px"}),
         html.P(id="connection-duration", style={"color": "white", "fontSize": "14px", "backgroundColor": "rgba(255,255,255,0.1)", "padding": "10px", "borderRadius": "10px", "textAlign": "center", "marginBottom": "20px"}),
 
-        html.H6("🕒 Last Update", style={"color": "white", "marginBottom": "8px", "fontWeight": "bold", "fontSize": "16px"}),
+        html.H6("Last Update", style={"color": "white", "marginBottom": "8px", "fontWeight": "bold", "fontSize": "16px"}),
         html.P(id="last-update", style={"color": "white", "fontSize": "14px", "backgroundColor": "rgba(255,255,255,0.1)", "padding": "10px", "borderRadius": "10px", "textAlign": "center", "marginBottom": "20px"}),
 
         html.Hr(style={"borderColor": "rgba(255,255,255,0.3)", "margin": "25px 0"}),
 
-        html.H6("📊 Pressure Sensor Info", style={"color": "white", "marginBottom": "15px", "fontWeight": "bold", "fontSize": "16px"}),
+        html.H6("Pressure Sensor Info", style={"color": "white", "marginBottom": "15px", "fontWeight": "bold", "fontSize": "16px"}),
         html.P("", style={"color": "white", "fontSize": "14px", "marginBottom": "8px", "textAlign": "center"}),
         html.P(id="pressure-next-update", style={"color": "white", "fontSize": "14px", "backgroundColor": "rgba(255,255,255,0.1)", "padding": "10px", "borderRadius": "10px", "textAlign": "center", "marginBottom": "20px"}),
 
         html.Hr(style={"borderColor": "rgba(255,255,255,0.3)", "margin": "25px 0"}),
 
-        html.H6("📥 Export Data", style={"color": "white", "marginBottom": "15px", "fontWeight": "bold", "fontSize": "16px"}),
-        dbc.Button("📥 Download Excel", id="btn-download-excel", color="primary", className="enhanced-btn", style={"width": "100%", "marginBottom": "15px", "fontWeight": "bold", "padding": "12px", "fontSize": "14px"}),
+        html.H6("Export Data", style={"color": "white", "marginBottom": "15px", "fontWeight": "bold", "fontSize": "16px"}),
+        dbc.Button("Download Excel", id="btn-download-excel", color="primary", className="enhanced-btn", style={"width": "100%", "marginBottom": "15px", "fontWeight": "bold", "padding": "12px", "fontSize": "14px"}),
         dcc.Download(id="download-excel"),
 
         html.Hr(style={"margin": "25px 0", "borderColor": "rgba(255,255,255,0.3)"}),
 
-        html.H6("👤 User Info", style={"color": "white", "marginBottom": "8px", "fontWeight": "bold", "fontSize": "16px"}),
+        html.H6("User Info", style={"color": "white", "marginBottom": "8px", "fontWeight": "bold", "fontSize": "16px"}),
         html.P(id="user-info", style={"color": "white", "fontSize": "14px", "marginBottom": "15px", "backgroundColor": "rgba(255,255,255,0.1)", "padding": "10px", "borderRadius": "10px", "textAlign": "center"}),
 
         html.Div([
-            dbc.Button("🚪 Logout", id="btn-logout", color="warning", className="enhanced-btn",
+            dbc.Button("Logout", id="btn-logout", color="warning", className="enhanced-btn",
                       style={"width": "100%", "fontWeight": "bold", "padding": "12px", "fontSize": "14px"}),
         ], style={"marginTop": "10px", "marginBottom": "20px"}),
     ], style={"padding": "25px"})
@@ -1222,7 +1244,7 @@ sidebar = html.Div([
 # ================== FULL SCREEN MODAL COMPONENT ==================
 fullscreen_modal = html.Div([
     html.Div([
-        html.Button("✕", id="close-fullscreen", className="close-fullscreen"),
+        html.Button("X", id="close-fullscreen", className="close-fullscreen"),
         html.Div(id="fullscreen-graph-content", style={"width": "100%", "height": "100%"})
     ], className="fullscreen-content")
 ], id="fullscreen-modal", className="fullscreen-modal", style={"display": "none"})
@@ -1230,7 +1252,7 @@ fullscreen_modal = html.Div([
 # ================== CLEAN LOGIN PAGE ==================
 login_page = html.Div([
     html.Div([
-        html.H2("🔐 Login Required", style={
+        html.H2("Login Required", style={
             "color": "white",
             "margin": 0,
             "padding": "25px",
@@ -1244,7 +1266,7 @@ login_page = html.Div([
     ]),
 
     dbc.Card([
-        dbc.CardHeader("🚀 Welcome to SWSM IoT Dashboard", style={
+        dbc.CardHeader("Welcome to SWSM IoT Dashboard", style={
             "background": "linear-gradient(45deg, #667eea, #764ba2)",
             "color": "white",
             "fontWeight": "bold",
@@ -1256,7 +1278,7 @@ login_page = html.Div([
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("👤 Username *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Username *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dbc.Input(
                         id="login-username",
                         type="text",
@@ -1266,7 +1288,7 @@ login_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("🔒 Password *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Password *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dbc.Input(
                         id="login-password",
                         type="password",
@@ -1278,11 +1300,11 @@ login_page = html.Div([
             ]),
 
             html.Div([
-                html.H6("📝 Login Instructions:", style={"fontWeight": "bold", "marginBottom": "15px", "color": "#2c3e50", "fontSize": "18px", "textAlign": "center"}),
+                html.H6("Login Instructions:", style={"fontWeight": "bold", "marginBottom": "15px", "color": "#2c3e50", "fontSize": "18px", "textAlign": "center"}),
                 dbc.Row([
                     dbc.Col([
-                        html.P("👤 Enter your username manually", style={"fontSize": "14px", "marginBottom": "8px", "color": "#666", "textAlign": "center"}),
-                        html.P("🔒 Enter your password", style={"fontSize": "14px", "color": "#666", "textAlign": "center"})
+                        html.P("Enter your username manually", style={"fontSize": "14px", "marginBottom": "8px", "color": "#666", "textAlign": "center"}),
+                        html.P("Enter your password", style={"fontSize": "14px", "color": "#666", "textAlign": "center"})
                     ], md=6),
                     dbc.Col([
                         html.P("Admins have access to additional features", style={"fontSize": "14px", "marginBottom": "8px", "color": "#666", "textAlign": "center"}),
@@ -1316,7 +1338,7 @@ login_page = html.Div([
 # ================== CLEAN ANALYSIS PAGE ==================
 analysis_page = html.Div([
     html.Div([
-        html.H2("📈 Sensor Data Analytics Dashboard", style={
+        html.H2("Sensor Data Analytics Dashboard", style={
             "color": "white",
             "margin": 0,
             "padding": "25px",
@@ -1331,7 +1353,7 @@ analysis_page = html.Div([
 
     # Clean Filters Section
     dbc.Card([
-        dbc.CardHeader("🔧 Advanced Analytics Filters", style={
+        dbc.CardHeader("Advanced Analytics Filters", style={
             "background": "linear-gradient(45deg, #667eea, #764ba2)",
             "color": "white",
             "fontWeight": "bold",
@@ -1343,7 +1365,7 @@ analysis_page = html.Div([
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("🌍 Region", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Region", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="analysis-region",
                         options=[{"label": "All Regions", "value": "All"}] + [{"label": s, "value": s} for s in sorted(base_df["Region"].unique())] if not base_df.empty else [],
@@ -1355,14 +1377,14 @@ analysis_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("📡 Sensor Type", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Sensor Type", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="analysis-sensor-type",
                         options=[
                             {"label": "All Sensors", "value": "all"},
-                            {"label": "🌊 Flow Meter", "value": "flow"},
-                            {"label": "🧪 Chlorine Sensor", "value": "cl"},
-                            {"label": "📊 Pressure Sensor", "value": "pressure"}
+                            {"label": "Flow Meter", "value": "flow"},
+                            {"label": "Chlorine Sensor", "value": "cl"},
+                            {"label": "Pressure Sensor", "value": "pressure"}
                         ],
                         value="all",
                         placeholder="Select Sensor Type",
@@ -1382,9 +1404,9 @@ analysis_page = html.Div([
 
     # Clean KPI Cards Section - FIRST ROW
     dbc.Row([
-        # 1️⃣ Total Request Received
+        # 1. Total Request Received
         dbc.Col(dbc.Card([
-            dbc.CardHeader("📊 Total Requests", style={
+            dbc.CardHeader("Total Requests", style={
                 "background": "linear-gradient(45deg, #667eea, #764ba2)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -1405,9 +1427,9 @@ analysis_page = html.Div([
             "cursor": "pointer"
         }), md=2),
 
-        # 2️⃣ Integrated
+        # 2. Integrated
         dbc.Col(dbc.Card([
-            dbc.CardHeader("✅ Integrated", style={
+            dbc.CardHeader("Integrated", style={
                 "background": "linear-gradient(45deg, #56ab2f, #a8e6cf)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -1428,9 +1450,9 @@ analysis_page = html.Div([
             "cursor": "pointer"
         }), md=2),
 
-        # 3️⃣ Communicating
+        # 3. Communicating
         dbc.Col(dbc.Card([
-            dbc.CardHeader("📡 Communicating", style={
+            dbc.CardHeader("Communicating", style={
                 "background": "linear-gradient(45deg, #4facfe, #00f2fe)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -1451,9 +1473,9 @@ analysis_page = html.Div([
             "cursor": "pointer"
         }), md=2),
 
-        # 4️⃣ Not Communicating
+        # 4. Not Communicating
         dbc.Col(dbc.Card([
-            dbc.CardHeader("❌ Not Communicating", style={
+            dbc.CardHeader("Not Communicating", style={
                 "background": "linear-gradient(45deg, #ff416c, #ff4b2b)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -1474,9 +1496,9 @@ analysis_page = html.Div([
             "cursor": "pointer"
         }), md=2),
 
-        # 5️⃣ Returned to SI
+        # 5. Returned to SI
         dbc.Col(dbc.Card([
-            dbc.CardHeader("🔄 Returned to SI", style={
+            dbc.CardHeader("Returned to SI", style={
                 "background": "linear-gradient(45deg, #f7971e, #ffd200)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -1497,9 +1519,9 @@ analysis_page = html.Div([
             "cursor": "pointer"
         }), md=2),
 
-        # 6️⃣ In Progress
+        # 6. In Progress
         dbc.Col(dbc.Card([
-            dbc.CardHeader("⏳ In Progress", style={
+            dbc.CardHeader("In Progress", style={
                 "background": "linear-gradient(45deg, #9c27b0, #e91e63)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -1523,9 +1545,9 @@ analysis_page = html.Div([
 
     # SECOND ROW FOR ADDITIONAL CARDS
     dbc.Row([
-        # 7️⃣ Integrated but Not Communicating - NEW CARD
+        # 7. Integrated but Not Communicating - NEW CARD
         dbc.Col(dbc.Card([
-            dbc.CardHeader("⚠️ Integrated but Not Communicating", style={
+            dbc.CardHeader("Integrated but Not Communicating", style={
                 "background": "linear-gradient(45deg, #ff6f00, #ffa040)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -1552,7 +1574,7 @@ analysis_page = html.Div([
 
     # Clean Data Table Section
     dbc.Card([
-        dbc.CardHeader("📋 Detailed Analytics Data", style={
+        dbc.CardHeader("Detailed Analytics Data", style={
             "background": "linear-gradient(45deg, #667eea, #764ba2)",
             "color": "white",
             "fontWeight": "bold",
@@ -1564,7 +1586,7 @@ analysis_page = html.Div([
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("🔎 Search Analytics:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Search Analytics:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dbc.Input(
                         id="analysis-search",
                         type="text",
@@ -1574,7 +1596,7 @@ analysis_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("📄 Rows per page:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Rows per page:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="analysis-page-size",
                         options=[
@@ -1589,7 +1611,7 @@ analysis_page = html.Div([
                     )
                 ], md=3),
                 dbc.Col([
-                    dbc.Label("🎯 Active Filter:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Active Filter:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     html.Div(id="analysis-active-filter", style={
                         "background": "linear-gradient(135deg, #667eea, #764ba2)",
                         "padding": "15px",
@@ -1702,7 +1724,7 @@ analysis_page = html.Div([
 # ================== CLEAN ADD ENTRY PAGE ==================
 add_entry_page = html.Div([
     html.Div([
-        html.H2("➕ Add New Sensor Entry", style={
+        html.H2("Add New Sensor Entry", style={
             "color": "white",
             "margin": 0,
             "padding": "25px",
@@ -1724,7 +1746,7 @@ add_entry_page = html.Div([
 
     # Clean Entry Form Card
     dbc.Card([
-        dbc.CardHeader("📋 New Sensor Entry Details", style={
+        dbc.CardHeader("New Sensor Entry Details", style={
             "background": "linear-gradient(45deg, #667eea, #764ba2)",
             "color": "white",
             "fontWeight": "bold",
@@ -1736,7 +1758,7 @@ add_entry_page = html.Div([
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("🌍 Region *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Region *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="new-region",
                         options=[],
@@ -1747,7 +1769,7 @@ add_entry_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("🔵 Circle *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Circle *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="new-circle",
                         options=[],
@@ -1760,7 +1782,7 @@ add_entry_page = html.Div([
 
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("🏢 Division *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Division *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="new-division",
                         options=[],
@@ -1770,7 +1792,7 @@ add_entry_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("🏛️ Sub Division *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Sub Division *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="new-subdivision",
                         options=[],
@@ -1783,7 +1805,7 @@ add_entry_page = html.Div([
 
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("📦 Block *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Block *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="new-block",
                         options=[],
@@ -1793,7 +1815,7 @@ add_entry_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("🏗️ Scheme *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Scheme *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="new-scheme",
                         options=[],
@@ -1806,7 +1828,7 @@ add_entry_page = html.Div([
 
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("🏘️ Village *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Village *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="new-village",
                         options=[],
@@ -1823,7 +1845,7 @@ add_entry_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("💧 Reservoir *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Reservoir *", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="new-reservoir",
                         options=[],
@@ -1846,13 +1868,13 @@ add_entry_page = html.Div([
             # Clean Sensor Selection Section
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("📡 Sensor Selection *", style={"fontWeight": "bold", "fontSize": "18px", "marginBottom": "15px", "color": "#2c3e50", "textAlign": "center"}),
+                    dbc.Label("Sensor Selection *", style={"fontWeight": "bold", "fontSize": "18px", "marginBottom": "15px", "color": "#2c3e50", "textAlign": "center"}),
                     dcc.Dropdown(
                         id="sensor-selection",
                         options=[
-                            {"label": "🌊 Flow Meter", "value": "flow"},
-                            {"label": "🧪 Chlorine Sensor", "value": "cl"},
-                            {"label": "📊 Pressure Sensor", "value": "pressure"}
+                            {"label": "Flow Meter", "value": "flow"},
+                            {"label": "Chlorine Sensor", "value": "cl"},
+                            {"label": "Pressure Sensor", "value": "pressure"}
                         ],
                         placeholder="Select Sensor Type",
                         multi=True,
@@ -1866,7 +1888,7 @@ add_entry_page = html.Div([
             html.Div(id="sensor-input-fields", children=[
                 dbc.Row([
                     dbc.Col([
-                        dbc.Label("🌊 Flow Meter Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Flow Meter Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dbc.Input(
                             id="new-flow-topic",
                             type="text",
@@ -1877,7 +1899,7 @@ add_entry_page = html.Div([
                         html.Div(id="flow-topic-status", style={"fontSize": "14px", "marginBottom": "20px", "padding": "12px", "borderRadius": "10px", "fontWeight": "bold", "textAlign": "center"})
                     ], md=4, id="flow-topic-col", style={"display": "none"}),
                     dbc.Col([
-                        dbc.Label("🧪 Chlorine Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Chlorine Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dbc.Input(
                             id="new-cl-topic",
                             type="text",
@@ -1888,12 +1910,12 @@ add_entry_page = html.Div([
                         html.Div(id="cl-topic-status", style={"fontSize": "14px", "marginBottom": "20px", "padding": "12px", "borderRadius": "10px", "fontWeight": "bold", "textAlign": "center"})
                     ], md=4, id="cl-topic-col", style={"display": "none"}),
                     dbc.Col([
-                        dbc.Label("🔬 Chlorine Type", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Chlorine Type", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dcc.Dropdown(
                             id="new-cl-type",
                             options=[
-                                {"label": "🧪 DPD", "value": "DPD"},
-                                {"label": "📊 4-20 mA", "value": "4-20 mA"}
+                                {"label": "DPD", "value": "DPD"},
+                                {"label": "4-20 mA", "value": "4-20 mA"}
                             ],
                             placeholder="Select Chlorine Type",
                             className="enhanced-dropdown",
@@ -1904,7 +1926,7 @@ add_entry_page = html.Div([
 
                 dbc.Row([
                     dbc.Col([
-                        dbc.Label("📊 Pressure Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Pressure Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dbc.Input(
                             id="new-pressure-topic",
                             type="text",
@@ -1915,7 +1937,7 @@ add_entry_page = html.Div([
                         html.Div(id="pressure-topic-status", style={"fontSize": "14px", "marginBottom": "20px", "padding": "12px", "borderRadius": "10px", "fontWeight": "bold", "textAlign": "center"})
                     ], md=6, id="pressure-topic-col", style={"display": "none"}),
                     dbc.Col([
-                        dbc.Label("📨 Message Type", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Message Type", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dbc.Input(
                             id="new-message-type",
                             type="text",
@@ -1932,13 +1954,13 @@ add_entry_page = html.Div([
 
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("📝 Status", style={"fontWeight": "bold", "fontSize": "18px", "color": "#2c3e50", "marginBottom": "12px"}),
+                    dbc.Label("Status", style={"fontWeight": "bold", "fontSize": "18px", "color": "#2c3e50", "marginBottom": "12px"}),
                     dcc.Dropdown(
                         id="new-status",
                         options=[
-                            {"label": "📤 Submitted", "value": "submitted"},
-                            {"label": "✅ Integrated", "value": "Integrated"},
-                            {"label": "🔄 Returned to SI with comments", "value": "Returned to SI with comments"}
+                            {"label": "Submitted", "value": "submitted"},
+                            {"label": "Integrated", "value": "Integrated"},
+                            {"label": "Returned to SI with comments", "value": "Returned to SI with comments"}
                         ],
                         value="submitted",
                         className="enhanced-dropdown",
@@ -1946,7 +1968,7 @@ add_entry_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("💬 Remarks", style={"fontWeight": "bold", "fontSize": "18px", "color": "#2c3e50", "marginBottom": "12px"}),
+                    dbc.Label("Remarks", style={"fontWeight": "bold", "fontSize": "18px", "color": "#2c3e50", "marginBottom": "12px"}),
                     dbc.Textarea(
                         id="new-remarks",
                         placeholder="Enter remarks...",
@@ -1977,8 +1999,8 @@ add_entry_page = html.Div([
 
             dbc.Row([
                 dbc.Col([
-                    dbc.Button("🔍 Check Topics", id="btn-check-topics", color="info", className="enhanced-btn", style={"marginRight": "15px", "marginBottom": "15px", "fontWeight": "bold", "borderRadius": "12px", "padding": "15px", "fontSize": "15px"}),
-                    dbc.Button("✅ Submit Entry", id="btn-submit-entry", color="success", className="enhanced-btn", style={"marginBottom": "15px", "fontWeight": "bold", "borderRadius": "12px", "padding": "15px", "fontSize": "15px"}, disabled=True),
+                    dbc.Button("Check Topics", id="btn-check-topics", color="info", className="enhanced-btn", style={"marginRight": "15px", "marginBottom": "15px", "fontWeight": "bold", "borderRadius": "12px", "padding": "15px", "fontSize": "15px"}),
+                    dbc.Button("Submit Entry", id="btn-submit-entry", color="success", className="enhanced-btn", style={"marginBottom": "15px", "fontWeight": "bold", "borderRadius": "12px", "padding": "15px", "fontSize": "15px"}, disabled=True),
                 ], md=12, style={"textAlign": "center"}),
             ]),
             html.Div(id="submit-status", style={"marginTop": "20px"})
@@ -1994,7 +2016,7 @@ add_entry_page = html.Div([
     # Clean Admin Controls Section
     html.Div(id="admin-controls-section", children=[
         dbc.Card([
-            dbc.CardHeader("🛠️ Admin Controls - Recent Entries", style={
+            dbc.CardHeader("Admin Controls - Recent Entries", style={
                 "background": "linear-gradient(45deg, #56ab2f, #a8e6cf)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -2006,14 +2028,14 @@ add_entry_page = html.Div([
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col([
-                        dbc.Label("🔍 Filter by Status:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Filter by Status:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dcc.Dropdown(
                             id="status-filter",
                             options=[
-                                {"label": "📋 All", "value": "All"},
-                                {"label": "📤 Submitted", "value": "submitted"},
-                                {"label": "✅ Integrated", "value": "Integrated"},
-                                {"label": "🔄 Returned to SI with comments", "value": "Returned to SI with comments"}
+                                {"label": "All", "value": "All"},
+                                {"label": "Submitted", "value": "submitted"},
+                                {"label": "Integrated", "value": "Integrated"},
+                                {"label": "Returned to SI with comments", "value": "Returned to SI with comments"}
                             ],
                             value="All",
                             className="enhanced-dropdown",
@@ -2021,7 +2043,7 @@ add_entry_page = html.Div([
                         )
                     ], md=3),
                     dbc.Col([
-                        dbc.Label("🔎 Search:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Search:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dbc.Input(
                             id="search-new-entries",
                             type="text",
@@ -2031,7 +2053,7 @@ add_entry_page = html.Div([
                         )
                     ], md=6),
                     dbc.Col([
-                        dbc.Label("📄 Items per page:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Items per page:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dcc.Dropdown(
                             id="page-size-new-entries",
                             options=[
@@ -2050,7 +2072,7 @@ add_entry_page = html.Div([
                 # Clean Save Changes Button
                 dbc.Row([
                     dbc.Col([
-                        dbc.Button("💾 Save All Changes", id="btn-save-changes", color="primary", className="enhanced-btn",
+                        dbc.Button("Save All Changes", id="btn-save-changes", color="primary", className="enhanced-btn",
                                   style={"marginBottom": "20px", "width": "200px", "fontWeight": "bold", "borderRadius": "12px", "padding": "15px", "fontSize": "15px"}),
                         html.Div(id="save-status", style={"marginTop": "15px"})
                     ], md=12, style={"textAlign": "center"}),
@@ -2160,7 +2182,7 @@ add_entry_page = html.Div([
     # Clean User's Recent Entries Section
     html.Div(id="user-recent-entries-section", children=[
         dbc.Card([
-            dbc.CardHeader("📋 Your Recent Entries", style={
+            dbc.CardHeader("Your Recent Entries", style={
                 "background": "linear-gradient(45deg, #4facfe, #00f2fe)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -2172,14 +2194,14 @@ add_entry_page = html.Div([
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col([
-                        dbc.Label("🔍 Filter by Status:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Filter by Status:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dcc.Dropdown(
                             id="user-status-filter",
                             options=[
-                                {"label": "📋 All", "value": "All"},
-                                {"label": "📤 Submitted", "value": "submitted"},
-                                {"label": "✅ Integrated", "value": "Integrated"},
-                                {"label": "🔄 Returned to SI with comments", "value": "Returned to SI with comments"}
+                                {"label": "All", "value": "All"},
+                                {"label": "Submitted", "value": "submitted"},
+                                {"label": "Integrated", "value": "Integrated"},
+                                {"label": "Returned to SI with comments", "value": "Returned to SI with comments"}
                             ],
                             value="All",
                             className="enhanced-dropdown",
@@ -2187,7 +2209,7 @@ add_entry_page = html.Div([
                         )
                     ], md=4),
                     dbc.Col([
-                        dbc.Label("🔎 Search:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Search:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dbc.Input(
                             id="user-search-entries",
                             type="text",
@@ -2197,7 +2219,7 @@ add_entry_page = html.Div([
                         )
                     ], md=5),
                     dbc.Col([
-                        dbc.Label("📄 Items per page:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                        dbc.Label("Items per page:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                         dcc.Dropdown(
                             id="user-page-size",
                             options=[
@@ -2316,7 +2338,7 @@ add_entry_page = html.Div([
 # ================== RESERVOIR ANALYTICS PAGE ==================
 reservoir_analytics_page = html.Div([
     html.Div([
-        html.H2("📊 Reservoir Analytics Dashboard", style={
+        html.H2("Reservoir Analytics Dashboard", style={
             "color": "white",
             "margin": 0,
             "padding": "25px",
@@ -2331,7 +2353,7 @@ reservoir_analytics_page = html.Div([
 
     # Reservoir Information Card
     dbc.Card([
-        dbc.CardHeader("🏗️ Reservoir Information", style={
+        dbc.CardHeader("Reservoir Information", style={
             "background": "linear-gradient(45deg, #56ab2f, #a8e6cf)",
             "color": "white",
             "fontWeight": "bold",
@@ -2346,35 +2368,35 @@ reservoir_analytics_page = html.Div([
                     html.H4(id="reservoir-name", style={"color": "#2c3e50", "fontWeight": "bold", "marginBottom": "15px", "textAlign": "center"}),
                     dbc.Row([
                         dbc.Col([
-                            html.P("🏗️ Scheme ID - Name:", style={"fontWeight": "bold", "marginBottom": "5px"}),
+                            html.P("Scheme ID - Name:", style={"fontWeight": "bold", "marginBottom": "5px"}),
                             html.P(id="reservoir-scheme", style={"color": "#666"}),
-                            html.P("🏘️ Village Name:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
+                            html.P("Village Name:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
                             html.P(id="reservoir-village", style={"color": "#666"}),
-                            html.P("💧 Reservoir:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
+                            html.P("Reservoir:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
                             html.P(id="reservoir-name-display", style={"color": "#666"}),
                         ], md=6),
                         dbc.Col([
-                            html.P("👥 Population:", style={"fontWeight": "bold", "marginBottom": "5px"}),
+                            html.P("Population:", style={"fontWeight": "bold", "marginBottom": "5px"}),
                             html.P(id="reservoir-population", style={"color": "#666"}),
-                            html.P("🌍 Region:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
+                            html.P("Region:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
                             html.P(id="reservoir-region-display", style={"color": "#666"}),
-                            html.P("🏛️ Sub Division:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
+                            html.P("Sub Division:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
                             html.P(id="reservoir-subdivision", style={"color": "#666"}),
                         ], md=6),
                     ]),
                     html.Hr(style={"margin": "20px 0"}),
                     dbc.Row([
                         dbc.Col([
-                            html.P("🔵 Circle:", style={"fontWeight": "bold", "marginBottom": "5px"}),
+                            html.P("Circle:", style={"fontWeight": "bold", "marginBottom": "5px"}),
                             html.P(id="reservoir-circle", style={"color": "#666"}),
-                            html.P("📦 Block:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
+                            html.P("Block:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
                             html.P(id="reservoir-block", style={"color": "#666"}),
                         ], md=6),
                         dbc.Col([
-                            html.P("💧 Reservoir Type:", style={"fontWeight": "bold", "marginBottom": "5px"}),
+                            html.P("Reservoir Type:", style={"fontWeight": "bold", "marginBottom": "5px"}),
                             html.P("ESR", style={"color": "#666"}),
-                          #  html.P("📊 Reservoir Capacity:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
-                           # html.P("1.34 LL", style={"color": "#666"}),
+                            html.P("Reservoir Capacity:", style={"fontWeight": "bold", "marginBottom": "5px", "marginTop": "15px"}),
+                            html.P("1.34 LL", style={"color": "#666"}),
                         ], md=6),
                     ]),
                 ], md=12),
@@ -2391,9 +2413,9 @@ reservoir_analytics_page = html.Div([
     dbc.Row([
         # Totalizer Graph
         dbc.Col(html.Div([
-            html.Div("🔍", className="expand-icon", id="expand-totalizer"),
+            html.Div("[+]", className="expand-icon", id="expand-totalizer"),
             dbc.Card([
-                dbc.CardHeader("📈 Totalizer Value Over Time", style={
+                dbc.CardHeader("Totalizer Value Over Time", style={
                     "background": "linear-gradient(45deg, #667eea, #764ba2)",
                     "color": "white",
                     "fontWeight": "bold",
@@ -2415,9 +2437,9 @@ reservoir_analytics_page = html.Div([
 
         # Water Consumption Graph
         dbc.Col(html.Div([
-            html.Div("🔍", className="expand-icon", id="expand-consumption"),
+            html.Div("[+]", className="expand-icon", id="expand-consumption"),
             dbc.Card([
-                dbc.CardHeader("💧 Daily Water Consumption", style={
+                dbc.CardHeader("Daily Water Consumption", style={
                     "background": "linear-gradient(45deg, #4facfe, #00f2fe)",
                     "color": "white",
                     "fontWeight": "bold",
@@ -2442,9 +2464,9 @@ reservoir_analytics_page = html.Div([
     dbc.Row([
         # LPCD Graph
         dbc.Col(html.Div([
-            html.Div("🔍", className="expand-icon", id="expand-lpcd"),
+            html.Div("[+]", className="expand-icon", id="expand-lpcd"),
             dbc.Card([
-                dbc.CardHeader("👥 LPCD (Liters Per Capita Per Day)", style={
+                dbc.CardHeader("LPCD (Liters Per Capita Per Day)", style={
                     "background": "linear-gradient(45deg, #56ab2f, #a8e6cf)",
                     "color": "white",
                     "fontWeight": "bold",
@@ -2466,9 +2488,9 @@ reservoir_analytics_page = html.Div([
 
         # Flow Rate Gauge
         dbc.Col(html.Div([
-            html.Div("🔍", className="expand-icon", id="expand-flow"),
+            html.Div("[+]", className="expand-icon", id="expand-flow"),
             dbc.Card([
-                dbc.CardHeader("🌊 Current Flow Rate", style={
+                dbc.CardHeader("Current Flow Rate", style={
                     "background": "linear-gradient(45deg, #ff416c, #ff4b2b)",
                     "color": "white",
                     "fontWeight": "bold",
@@ -2490,9 +2512,9 @@ reservoir_analytics_page = html.Div([
 
         # Chlorine Level Graph
         dbc.Col(html.Div([
-            html.Div("🔍", className="expand-icon", id="expand-chlorine"),
+            html.Div("[+]", className="expand-icon", id="expand-chlorine"),
             dbc.Card([
-                dbc.CardHeader("🧪 Chlorine Levels", style={
+                dbc.CardHeader("Chlorine Levels", style={
                     "background": "linear-gradient(45deg, #f7971e, #ffd200)",
                     "color": "white",
                     "fontWeight": "bold",
@@ -2516,9 +2538,9 @@ reservoir_analytics_page = html.Div([
     # Pressure Graph
     dbc.Row([
         dbc.Col(html.Div([
-            html.Div("🔍", className="expand-icon", id="expand-pressure"),
+            html.Div("[+]", className="expand-icon", id="expand-pressure"),
             dbc.Card([
-                dbc.CardHeader("📊 Pressure Monitoring", style={
+                dbc.CardHeader("Pressure Monitoring", style={
                     "background": "linear-gradient(45deg, #9c27b0, #e91e63)",
                     "color": "white",
                     "fontWeight": "bold",
@@ -2564,7 +2586,7 @@ main_page = html.Div([
     # Clean Communication Status Cards
     dbc.Row([
         dbc.Col(dbc.Card([
-            dbc.CardHeader("🌊 Flow Meter Communication", style={
+            dbc.CardHeader("Flow Meter Communication", style={
                 "background": "linear-gradient(45deg, #667eea, #764ba2)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -2587,7 +2609,7 @@ main_page = html.Div([
         }), md=4),
 
         dbc.Col(dbc.Card([
-            dbc.CardHeader("🧪 Chlorine Communication", style={
+            dbc.CardHeader("Chlorine Communication", style={
                 "background": "linear-gradient(45deg, #56ab2f, #a8e6cf)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -2610,7 +2632,7 @@ main_page = html.Div([
         }), md=4),
 
         dbc.Col(dbc.Card([
-            dbc.CardHeader("📊 Pressure Communication", style={
+            dbc.CardHeader("Pressure Communication", style={
                 "background": "linear-gradient(45deg, #ff416c, #ff4b2b)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -2635,7 +2657,7 @@ main_page = html.Div([
 
     # Clean Topic selection
     dbc.Card([
-        dbc.CardHeader("📡 Real-Time Topic Selection", style={
+        dbc.CardHeader("Real-Time Topic Selection", style={
             "background": "linear-gradient(45deg, #667eea, #764ba2)",
             "color": "white",
             "fontWeight": "bold",
@@ -2647,7 +2669,7 @@ main_page = html.Div([
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("🌊 Flow Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Flow Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="flow-topic-dropdown",
                         options=[{"label": t, "value": t} for t in flow_topics],
@@ -2656,7 +2678,7 @@ main_page = html.Div([
                     )
                 ], md=4),
                 dbc.Col([
-                    dbc.Label("🧪 CL Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("CL Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="cl-topic-dropdown",
                         options=[{"label": t, "value": t} for t in cl_topics],
@@ -2665,7 +2687,7 @@ main_page = html.Div([
                     )
                 ], md=4),
                 dbc.Col([
-                    dbc.Label("📊 Pressure Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Pressure Topic", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="pressure-topic-dropdown",
                         options=[{"label": t, "value": t} for t in pressure_topics],
@@ -2685,7 +2707,7 @@ main_page = html.Div([
     # Clean KPI Cards
     dbc.Row([
         dbc.Col(dbc.Card([
-            dbc.CardHeader("🌊 Flow Meter Analytics", style={
+            dbc.CardHeader("Flow Meter Analytics", style={
                 "background": "linear-gradient(45deg, #667eea, #764ba2)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -2694,20 +2716,20 @@ main_page = html.Div([
                 "padding": "15px"
             }),
             dbc.CardBody([
-                html.P("📡 Selected Topic:", style={"fontWeight": "bold", "marginBottom": "8px", "color": "#2c3e50", "fontSize": "15px"}),
+                html.P("Selected Topic:", style={"fontWeight": "bold", "marginBottom": "8px", "color": "#2c3e50", "fontSize": "15px"}),
                 html.P(id="selected-flow-topic", style={"marginBottom": "20px", "fontSize": "14px", "background": "linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)", "padding": "12px", "borderRadius": "10px", "fontWeight": "bold", "textAlign": "center"}),
                 html.Hr(style={"margin": "15px 0", "borderColor": "rgba(0,0,0,0.1)"}),
-                html.P("📊 Latest Data:", style={"fontWeight": "bold", "marginBottom": "12px", "color": "#2c3e50", "fontSize": "16px", "textAlign": "center"}),
-                html.P("🕒 Recent Communication:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Latest Data:", style={"fontWeight": "bold", "marginBottom": "12px", "color": "#2c3e50", "fontSize": "16px", "textAlign": "center"}),
+                html.P("Recent Communication:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="flow-datetime", style={"marginBottom": "15px", "fontSize": "14px", "background": "rgba(79, 172, 254, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("🌊 Flow Rate:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Flow Rate:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="flow-value", style={"marginBottom": "12px", "fontSize": "14px", "background": "rgba(86, 171, 47, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("📈 Totalizer Value:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Totalizer Value:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="flow-total", style={"marginBottom": "12px", "fontSize": "14px", "background": "rgba(255, 193, 7, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("📶 Communication Status:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Communication Status:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="flow-remarks", style={"fontSize": "14px", "wordBreak": "break-all", "color": "#e53935", "background": "rgba(255, 65, 108, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
                 html.Hr(style={"margin": "15px 0", "borderColor": "rgba(0,0,0,0.1)"}),
-                html.P("📋 Raw JSON:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Raw JSON:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.Pre(id="flow-json", style={"fontSize": "11px", "background": "rgba(248,249,250,0.9)", "padding": "12px", "overflow": "auto", "maxHeight": "120px", "borderRadius": "10px", "border": "1px solid rgba(0,0,0,0.1)"})
             ], style={"padding": "25px"})
         ], className="enhanced-card shadow", style={
@@ -2719,7 +2741,7 @@ main_page = html.Div([
         }), md=4),
 
         dbc.Col(dbc.Card([
-            dbc.CardHeader("🧪 Chlorine Analytics", style={
+            dbc.CardHeader("Chlorine Analytics", style={
                 "background": "linear-gradient(45deg, #56ab2f, #a8e6cf)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -2728,20 +2750,20 @@ main_page = html.Div([
                 "padding": "15px"
             }),
             dbc.CardBody([
-                html.P("📡 Selected Topic:", style={"fontWeight": "bold", "marginBottom": "8px", "color": "#2c3e50", "fontSize": "15px"}),
+                html.P("Selected Topic:", style={"fontWeight": "bold", "marginBottom": "8px", "color": "#2c3e50", "fontSize": "15px"}),
                 html.P(id="selected-cl-topic", style={"marginBottom": "20px", "fontSize": "14px", "background": "linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)", "padding": "12px", "borderRadius": "10px", "fontWeight": "bold", "textAlign": "center"}),
                 html.Hr(style={"margin": "15px 0", "borderColor": "rgba(0,0,0,0.1)"}),
-                html.P("📊 Latest Data:", style={"fontWeight": "bold", "marginBottom": "12px", "color": "#2c3e50", "fontSize": "16px", "textAlign": "center"}),
-                html.P("🕒 Recent Communication:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Latest Data:", style={"fontWeight": "bold", "marginBottom": "12px", "color": "#2c3e50", "fontSize": "16px", "textAlign": "center"}),
+                html.P("Recent Communication:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="cl-datetime", style={"marginBottom": "15px", "fontSize": "14px", "background": "rgba(79, 172, 254, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("🧪 Chlorine:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Chlorine:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="cl-value", style={"marginBottom": "12px", "fontSize": "14px", "background": "rgba(86, 171, 47, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("📶 Signal:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Signal:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="cl-csq", style={"marginBottom": "12px", "fontSize": "14px", "background": "rgba(255, 193, 7, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("📶 Communication Status:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Communication Status:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="cl-remarks", style={"fontSize": "14px", "wordBreak": "break-all", "color": "#e53935", "background": "rgba(255, 65, 108, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
                 html.Hr(style={"margin": "15px 0", "borderColor": "rgba(0,0,0,0.1)"}),
-                html.P("📋 Raw JSON:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Raw JSON:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.Pre(id="cl-json", style={"fontSize": "11px", "background": "rgba(248,249,250,0.9)", "padding": "12px", "overflow": "auto", "maxHeight": "120px", "borderRadius": "10px", "border": "1px solid rgba(0,0,0,0.1)"})
             ], style={"padding": "25px"})
         ], className="enhanced-card shadow", style={
@@ -2753,7 +2775,7 @@ main_page = html.Div([
         }), md=4),
 
         dbc.Col(dbc.Card([
-            dbc.CardHeader("📊 Pressure Analytics", style={
+            dbc.CardHeader("Pressure Analytics", style={
                 "background": "linear-gradient(45deg, #ff416c, #ff4b2b)",
                 "color": "white",
                 "fontWeight": "bold",
@@ -2762,22 +2784,22 @@ main_page = html.Div([
                 "padding": "15px"
             }),
             dbc.CardBody([
-                html.P("📡 Selected Topic:", style={"fontWeight": "bold", "marginBottom": "8px", "color": "#2c3e50", "fontSize": "15px"}),
+                html.P("Selected Topic:", style={"fontWeight": "bold", "marginBottom": "8px", "color": "#2c3e50", "fontSize": "15px"}),
                 html.P(id="selected-pressure-topic", style={"marginBottom": "20px", "fontSize": "14px", "background": "linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)", "padding": "12px", "borderRadius": "10px", "fontWeight": "bold", "textAlign": "center"}),
                 html.Hr(style={"margin": "15px 0", "borderColor": "rgba(0,0,0,0.1)"}),
-                html.P("📊 Latest Data:", style={"fontWeight": "bold", "marginBottom": "12px", "color": "#2c3e50", "fontSize": "16px", "textAlign": "center"}),
-                html.P("🕒 Recent Communication:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Latest Data:", style={"fontWeight": "bold", "marginBottom": "12px", "color": "#2c3e50", "fontSize": "16px", "textAlign": "center"}),
+                html.P("Recent Communication:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="pressure-datetime", style={"marginBottom": "15px", "fontSize": "14px", "background": "rgba(79, 172, 254, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("📊 Pressure:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Pressure:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="pressure-value", style={"marginBottom": "12px", "fontSize": "14px", "background": "rgba(86, 171, 47, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("📶 Signal:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Signal:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="pressure-csq", style={"marginBottom": "12px", "fontSize": "14px", "background": "rgba(255, 193, 7, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("📦 Packages:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Packages:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="pressure-packages", style={"marginBottom": "12px", "fontSize": "14px", "background": "rgba(156, 39, 176, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
-                html.P("📶 Communication Status:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Communication Status:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.P(id="pressure-remarks", style={"fontSize": "14px", "wordBreak": "break-all", "color": "#e53935", "background": "rgba(255, 65, 108, 0.15)", "padding": "10px", "borderRadius": "8px", "fontWeight": "bold", "textAlign": "center"}),
                 html.Hr(style={"margin": "15px 0", "borderColor": "rgba(0,0,0,0.1)"}),
-                html.P("📋 Raw JSON:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
+                html.P("Raw JSON:", style={"fontWeight": "bold", "marginBottom": "6px", "fontSize": "14px", "color": "#666"}),
                 html.Pre(id="pressure-json", style={"fontSize": "11px", "background": "rgba(248,249,250,0.9)", "padding": "12px", "overflow": "auto", "maxHeight": "120px", "borderRadius": "10px", "border": "1px solid rgba(0,0,0,0.1)"})
             ], style={"padding": "25px"})
         ], className="enhanced-card shadow", style={
@@ -2791,7 +2813,7 @@ main_page = html.Div([
 
     # Clean Advanced Filtering for Tables
     dbc.Card([
-        dbc.CardHeader("🔧 Advanced Data Filtering", style={
+        dbc.CardHeader("Advanced Data Filtering", style={
             "background": "linear-gradient(45deg, #667eea, #764ba2)",
             "color": "white",
             "fontWeight": "bold",
@@ -2803,14 +2825,14 @@ main_page = html.Div([
         dbc.CardBody([
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("🌊 FM Status Filter:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("FM Status Filter:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="fm-status-filter",
                         options=[
-                            {"label": "📋 All", "value": "All"},
-                            {"label": "✅ Integrated", "value": "Integrated"},
-                            {"label": "🔄 Returned to SI with comments", "value": "Returned to SI with comments"},
-                            {"label": "⏳ In Progress", "value": "In Progress"}
+                            {"label": "All", "value": "All"},
+                            {"label": "Integrated", "value": "Integrated"},
+                            {"label": "Returned to SI with comments", "value": "Returned to SI with comments"},
+                            {"label": "In Progress", "value": "In Progress"}
                         ],
                         value="All",
                         className="enhanced-dropdown",
@@ -2818,14 +2840,14 @@ main_page = html.Div([
                     )
                 ], md=3),
                 dbc.Col([
-                    dbc.Label("🧪 CL Status Filter:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("CL Status Filter:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="cl-status-filter",
                         options=[
-                            {"label": "📋 All", "value": "All"},
-                            {"label": "✅ Integrated", "value": "Integrated"},
-                            {"label": "🔄 Returned to SI with comments", "value": "Returned to SI with comments"},
-                            {"label": "⏳ In Progress", "value": "In Progress"}
+                            {"label": "All", "value": "All"},
+                            {"label": "Integrated", "value": "Integrated"},
+                            {"label": "Returned to SI with comments", "value": "Returned to SI with comments"},
+                            {"label": "In Progress", "value": "In Progress"}
                         ],
                         value="All",
                         className="enhanced-dropdown",
@@ -2833,14 +2855,14 @@ main_page = html.Div([
                     )
                 ], md=3),
                 dbc.Col([
-                    dbc.Label("📊 PT Status Filter:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("PT Status Filter:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="pt-status-filter",
                         options=[
-                            {"label": "📋 All", "value": "All"},
-                            {"label": "✅ Integrated", "value": "Integrated"},
-                            {"label": "🔄 Returned to SI with comments", "value": "Returned to SI with comments"},
-                            {"label": "⏳ In Progress", "value": "In Progress"}
+                            {"label": "All", "value": "All"},
+                            {"label": "Integrated", "value": "Integrated"},
+                            {"label": "Returned to SI with comments", "value": "Returned to SI with comments"},
+                            {"label": "In Progress", "value": "In Progress"}
                         ],
                         value="All",
                         className="enhanced-dropdown",
@@ -2848,13 +2870,13 @@ main_page = html.Div([
                     )
                 ], md=3),
                 dbc.Col([
-                    dbc.Label("📶 Communication Status:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Communication Status:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="comm-status-filter",
                         options=[
-                            {"label": "📋 All", "value": "All"},
-                            {"label": "✅ Communicating", "value": "YES"},
-                            {"label": "❌ Not Communicating", "value": "NO"}
+                            {"label": "All", "value": "All"},
+                            {"label": "Communicating", "value": "YES"},
+                            {"label": "Not Communicating", "value": "NO"}
                         ],
                         value="All",
                         className="enhanced-dropdown",
@@ -2864,7 +2886,7 @@ main_page = html.Div([
             ]),
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("🔎 Search Data:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Search Data:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dbc.Input(
                         id="table-search",
                         type="text",
@@ -2874,7 +2896,7 @@ main_page = html.Div([
                     )
                 ], md=6),
                 dbc.Col([
-                    dbc.Label("📄 Rows per page:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
+                    dbc.Label("Rows per page:", style={"fontWeight": "bold", "color": "#2c3e50", "fontSize": "16px", "marginBottom": "10px"}),
                     dcc.Dropdown(
                         id="table-page-size",
                         options=[
@@ -2899,7 +2921,7 @@ main_page = html.Div([
 
     # Clean Tables with Tabs
     dbc.Card([
-        dbc.CardHeader("📊 Real-Time Data Tables", style={
+        dbc.CardHeader("Real-Time Data Tables", style={
             "background": "linear-gradient(45deg, #667eea, #764ba2)",
             "color": "white",
             "fontWeight": "bold",
@@ -2911,7 +2933,7 @@ main_page = html.Div([
         dbc.CardBody([
             dbc.Tabs([
                 dbc.Tab(
-                    label="🌊 Flow Meter Data",
+                    label="Flow Meter Data",
                     tab_id="flow_tab",
                     children=[
                         dash_table.DataTable(
@@ -3012,7 +3034,7 @@ main_page = html.Div([
                 ),
 
                 dbc.Tab(
-                    label="🧪 Chlorine Data",
+                    label="Chlorine Data",
                     tab_id="cl_tab",
                     children=[
                         dash_table.DataTable(
@@ -3089,7 +3111,7 @@ main_page = html.Div([
                 ),
 
                 dbc.Tab(
-                    label="📊 Pressure Data",
+                    label="Pressure Data",
                     tab_id="pressure_tab",
                     children=[
                         dash_table.DataTable(
@@ -3202,10 +3224,10 @@ def display_page(pathname, session_data):
 
     # Update sidebar user info
     if logged_in:
-        user_info = f"👤 Logged in as: {username} ({role})"
+        user_info = f"Logged in as: {username} ({role})"
         logout_style = {"width": "100%", "marginBottom": "10px", "fontWeight": "bold", "borderRadius": "10px", "padding": "10px"}
     else:
-        user_info = "👤 Not logged in"
+        user_info = "Not logged in"
         logout_style = {"width": "100%", "marginBottom": "10px", "display": "none"}
 
     if pathname == "/add-entry":
@@ -3286,7 +3308,7 @@ def show_login_status(login_clicks, username, password):
         return ""
 
     if not username or not password:
-        return dbc.Alert("❌ Please enter both username and password.", color="warning", style={"borderRadius": "10px", "fontSize": "14px"})
+        return dbc.Alert("Please enter both username and password.", color="warning", style={"borderRadius": "10px", "fontSize": "14px"})
 
     # Authenticate from database
     user = authenticate_user(username, password, "user")
@@ -3294,9 +3316,9 @@ def show_login_status(login_clicks, username, password):
         user = authenticate_user(username, password, "admin")
 
     if user:
-        return dbc.Alert(f"✅ Login successful! Welcome {username} ({user.get('role', 'user')}).", color="success", style={"borderRadius": "10px", "fontSize": "14px"})
+        return dbc.Alert(f"Login successful! Welcome {username} ({user.get('role', 'user')}).", color="success", style={"borderRadius": "10px", "fontSize": "14px"})
     else:
-        return dbc.Alert("❌ Invalid username or password. Please try again.", color="danger", style={"borderRadius": "10px", "fontSize": "14px"})
+        return dbc.Alert("Invalid username or password. Please try again.", color="danger", style={"borderRadius": "10px", "fontSize": "14px"})
 
 @app.callback(
     Output("user-welcome", "children"),
@@ -3313,7 +3335,7 @@ def update_user_welcome(session_data):
         if region:
             welcome_text += f" | Region: {region}"
         if mail:
-            welcome_text += f" | 📧 {mail}"
+            welcome_text += f" | {mail}"
 
         return welcome_text
     return ""
@@ -3498,10 +3520,10 @@ def update_village_reservoir_dropdowns(region, scheme, session_data):
     reservoirs = sorted(df[COL_RESERVOIR].dropna().unique())
 
     village_options = [{"label": v, "value": v} for v in villages]
-    village_options.append({"label": "✏️ Edit (Enter New)", "value": "EDIT"})
+    village_options.append({"label": "Edit (Enter New)", "value": "EDIT"})
 
     reservoir_options = [{"label": r, "value": r} for r in reservoirs]
-    reservoir_options.append({"label": "✏️ Edit (Enter New)", "value": "EDIT"})
+    reservoir_options.append({"label": "Edit (Enter New)", "value": "EDIT"})
 
     return village_options, reservoir_options
 
@@ -3590,38 +3612,38 @@ def update_submit_button(region, circle, division, subdivision, block, scheme,
     is_admin = session_data.get('role') == 'admin' if session_data else False
 
     if not all([region, circle, division, subdivision, block, scheme, sensor_selection]):
-        return True, "❌ Please fill all required fields (*)"
+        return True, "Please fill all required fields (*)"
 
     if not village or (village == "EDIT" and not village_input):
-        return True, "❌ Please select or enter a village"
+        return True, "Please select or enter a village"
 
     if not reservoir or (reservoir == "EDIT" and not reservoir_input):
-        return True, "❌ Please select or enter a reservoir"
+        return True, "Please select or enter a reservoir"
 
     if "flow" in sensor_selection and not flow_topic:
-        return True, "❌ Please provide Flow Meter topic"
+        return True, "Please provide Flow Meter topic"
     if "cl" in sensor_selection and not cl_topic:
-        return True, "❌ Please provide Chlorine topic"
+        return True, "Please provide Chlorine topic"
     if "pressure" in sensor_selection and not pressure_topic:
-        return True, "❌ Please provide Pressure topic"
+        return True, "Please provide Pressure topic"
     if "cl" in sensor_selection and not cl_type:
-        return True, "❌ Please select Chlorine type"
+        return True, "Please select Chlorine type"
 
     # Check study field for admin
     if is_admin and (not study_value or study_value.strip() == ""):
-        return True, "❌ Please fill Study field (required for admin)"
+        return True, "Please fill Study field (required for admin)"
 
     duplicate_topics = check_duplicate_topics(flow_topic, cl_topic, pressure_topic)
     if duplicate_topics:
-        return True, f"❌ Duplicate topics found in main file: {', '.join(duplicate_topics)}"
+        return True, f"Duplicate topics found in main file: {', '.join(duplicate_topics)}"
 
     status_messages = []
-    if "flow" in sensor_selection and "✅" not in str(flow_status):
-        status_messages.append("❌ Flow topic not communicating")
-    if "cl" in sensor_selection and "✅" not in str(cl_status):
-        status_messages.append("❌ Chlorine topic not communicating")
-    if "pressure" in sensor_selection and "✅" not in str(pressure_status):
-        status_messages.append("❌ Pressure topic not communicating")
+    if "flow" in sensor_selection and "[OK]" not in str(flow_status):
+        status_messages.append("Flow topic not communicating")
+    if "cl" in sensor_selection and "[OK]" not in str(cl_status):
+        status_messages.append("Chlorine topic not communicating")
+    if "pressure" in sensor_selection and "[OK]" not in str(pressure_status):
+        status_messages.append("Pressure topic not communicating")
 
     if status_messages:
         return True, "; ".join(status_messages)
@@ -3630,14 +3652,14 @@ def update_submit_button(region, circle, division, subdivision, block, scheme,
     final_reservoir = reservoir_input if reservoir == "EDIT" else reservoir
 
     remarks_parts = []
-    if "flow" in sensor_selection and "✅" in str(flow_status):
-        remarks_parts.append("🌊 Flow: Communicating ✅")
-    if "cl" in sensor_selection and "✅" in str(cl_status):
-        remarks_parts.append("🧪 Chlorine: Communicating ✅")
-    if "pressure" in sensor_selection and "✅" in str(pressure_status):
-        remarks_parts.append("📊 Pressure: Communicating ✅")
+    if "flow" in sensor_selection and "[OK]" in str(flow_status):
+        remarks_parts.append("Flow: Communicating [OK]")
+    if "cl" in sensor_selection and "[OK]" in str(cl_status):
+        remarks_parts.append("Chlorine: Communicating [OK]")
+    if "pressure" in sensor_selection and "[OK]" in str(pressure_status):
+        remarks_parts.append("Pressure: Communicating [OK]")
 
-    remarks = " | ".join(remarks_parts) if remarks_parts else "❌ No communication data"
+    remarks = " | ".join(remarks_parts) if remarks_parts else "No communication data"
 
     return False, remarks
 
@@ -3653,7 +3675,7 @@ def attach_latest(df_in, topic_col):
             payload_vals.append("")
             cl_type = row.get(COL_TYPE_CL, "") if topic_col == COL_CL else None
             sensor_type = "pressure" if topic_col == COL_PRESSURE else None
-            remark_vals.append("❌ NO")
+            remark_vals.append("NO")
             flow_vals.append("")
             total_vals.append("")
             cl_vals.append("")
@@ -3682,7 +3704,7 @@ def attach_latest(df_in, topic_col):
                 payload_vals.append("")
                 cl_type = row.get(COL_TYPE_CL, "") if topic_col == COL_CL else None
                 sensor_type = "pressure" if topic_col == COL_PRESSURE else None
-                remark_vals.append("❌ NO")
+                remark_vals.append("NO")
                 flow_vals.append("")
                 total_vals.append("")
                 cl_vals.append("")
@@ -3779,16 +3801,16 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
         mqtt_connected = mqtt_client is not None and getattr(mqtt_client, "is_connected", lambda: True)()
     except Exception:
         mqtt_connected = False
-    mqtt_status = "✅ MQTT Connected" if mqtt_connected else "❌ MQTT Disconnected"
+    mqtt_status = "MQTT Connected" if mqtt_connected else "MQTT Disconnected"
     mqtt_color = "success" if mqtt_connected else "danger"
 
     connection_duration = latest_store.get_connection_duration()
     hours_connected = connection_duration.total_seconds() / 72000
 
     next_pressure_update = max(0, PRESSURE_UPDATE_HOURS - hours_connected)
-    next_update_text = f"⏰ Next pressure data in: {next_pressure_update:.1f} hours"
+    next_update_text = f"Next pressure data in: {next_pressure_update:.1f} hours"
     if next_pressure_update <= 0:
-        next_update_text = "✅ Pressure data should be available now"
+        next_update_text = "Pressure data should be available now"
 
     df = base_df.copy() if not base_df.empty else pd.DataFrame()
 
@@ -3878,7 +3900,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
 
     if flow_total > 0:
         flow_pie_fig.add_trace(go.Pie(
-            labels=["✅ Communicating", "❌ Not Communicating"],
+            labels=["Communicating", "Not Communicating"],
             values=[flow_communicating, flow_nodata],
             hole=0.6,
             marker_colors=["#43a047", "#e53935"],
@@ -3891,7 +3913,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
         ))
     else:
         flow_pie_fig.add_trace(go.Pie(
-            labels=["📊 No Data"],
+            labels=["No Data"],
             values=[1],
             hole=0.6,
             marker_colors=["#bdbdbd"],
@@ -3902,7 +3924,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
 
     flow_pie_fig.update_layout(
         title=dict(
-            text="🌊 Flow Communication Status",
+            text="Flow Communication Status",
             x=0.5,
             xanchor="center",
             font=dict(size=16, color="#37474f", family="Arial Black")
@@ -3934,7 +3956,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
 
     if cl_total > 0:
         cl_pie_fig.add_trace(go.Pie(
-            labels=["✅ Communicating", "❌ Not Communicating"],
+            labels=["Communicating", "Not Communicating"],
             values=[cl_communicating, cl_nodata],
             hole=0.6,
             marker_colors=["#43a047", "#e53935"],
@@ -3947,7 +3969,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
         ))
     else:
         cl_pie_fig.add_trace(go.Pie(
-            labels=["📊 No Data"],
+            labels=["No Data"],
             values=[1],
             hole=0.6,
             marker_colors=["#bdbdbd"],
@@ -3958,7 +3980,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
 
     cl_pie_fig.update_layout(
         title=dict(
-            text="🧪 Chlorine Communication Status",
+            text="Chlorine Communication Status",
             x=0.5,
             xanchor="center",
             font=dict(size=16, color="#37474f", family="Arial Black")
@@ -3990,7 +4012,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
 
     if pressure_total > 0:
         pressure_pie_fig.add_trace(go.Pie(
-            labels=["✅ Communicating", "❌ Not Communicating"],
+            labels=["Communicating", "Not Communicating"],
             values=[pressure_communicating, pressure_nodata],
             hole=0.6,
             marker_colors=["#43a047", "#e53935"],
@@ -4003,7 +4025,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
         ))
     else:
         pressure_pie_fig.add_trace(go.Pie(
-            labels=["📊 No Data"],
+            labels=["No Data"],
             values=[1],
             hole=0.6,
             marker_colors=["#bdbdbd"],
@@ -4014,7 +4036,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
 
     pressure_pie_fig.update_layout(
         title=dict(
-            text="📊 Pressure Communication Status",
+            text="Pressure Communication Status",
             x=0.5,
             xanchor="center",
             font=dict(size=16, color="#37474f", family="Arial Black")
@@ -4056,23 +4078,23 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
         for row in pressure_data:
             row['_dash_pagesize'] = page_size
 
-    last_update = f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    connection_duration_str = f"⏱️ {hours_connected:.1f} hours"
+    last_update = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    connection_duration_str = f"{hours_connected:.1f} hours"
 
     return (flow_data, make_columns(flow_cols),
             cl_data, make_columns(cl_cols),
             pressure_data, make_columns(pressure_cols),
             last_update, connection_duration_str, next_update_text,
             mqtt_status, mqtt_color,
-            f"📊 Total Request Received: {flow_total}",
-            f"✅ Communicating: {flow_communicating}",
-            f"❌ Not Communicating: {flow_nodata}",
-            f"📊 Total Request Received: {cl_total}",
-            f"✅ Communicating: {cl_communicating}",
-            f"❌ Not Communicating: {cl_nodata}",
-            f"📊 Total Request Received: {pressure_total}",
-            f"✅ Communicating: {pressure_communicating}",
-            f"❌ Not Communicating: {pressure_nodata}",
+            f"Total Request Received: {flow_total}",
+            f"Communicating: {flow_communicating}",
+            f"Not Communicating: {flow_nodata}",
+            f"Total Request Received: {cl_total}",
+            f"Communicating: {cl_communicating}",
+            f"Not Communicating: {cl_nodata}",
+            f"Total Request Received: {pressure_total}",
+            f"Communicating: {pressure_communicating}",
+            f"Not Communicating: {pressure_nodata}",
             flow_pie_fig,
             cl_pie_fig,
             pressure_pie_fig)
@@ -4090,7 +4112,7 @@ def refresh_all(n, fm_status_filter, cl_status_filter, pt_status_filter, comm_fi
 )
 def update_flow_topic(topic, n):
     if not topic:
-        return "📡 No topic selected", "📊 No data", "📊 No data", "📊 No data", "📊 No data", "📊 No data"
+        return "No topic selected", "No data", "No data", "No data", "No data", "No data"
     rec = latest_store.get(topic)
     if rec:
         payload = rec["payload"]
@@ -4111,7 +4133,7 @@ def update_flow_topic(topic, n):
             parse_payload_and_get_remarks(payload),
             json_pretty
         )
-    return topic, "📊 No data", "📊 No data", "📊 No data", "📊 No data", "📊 No data"
+    return topic, "No data", "No data", "No data", "No data", "No data"
 
 @app.callback(
     Output("selected-cl-topic", "children"),
@@ -4125,7 +4147,7 @@ def update_flow_topic(topic, n):
 )
 def update_cl_topic(topic, n):
     if not topic:
-        return "📡 No topic selected", "📊 No data", "📊 No data", "📊 No data", "📊 No data", "📊 No data"
+        return "No topic selected", "No data", "No data", "No data", "No data", "No data"
     rec = latest_store.get(topic)
     if rec:
         payload = rec["payload"]
@@ -4146,7 +4168,7 @@ def update_cl_topic(topic, n):
             parse_payload_and_get_remarks(payload),
             json_pretty
         )
-    return topic, "📊 No data", "📊 No data", "📊 No data", "📊 No data", "📊 No data"
+    return topic, "No data", "No data", "No data", "No data", "No data"
 
 @app.callback(
     Output("selected-pressure-topic", "children"),
@@ -4161,7 +4183,7 @@ def update_cl_topic(topic, n):
 )
 def update_pressure_topic(topic, n):
     if not topic:
-        return "📡 No topic selected", "📊 No data", "📊 No data", "📊 No data", "📊 No data", "📊 No data", "📊 No data"
+        return "No topic selected", "No data", "No data", "No data", "No data", "No data", "No data"
     rec = latest_store.get(topic)
     if rec:
         payload = rec["payload"]
@@ -4189,11 +4211,11 @@ def update_pressure_topic(topic, n):
     time_until_update = max(0, PRESSURE_UPDATE_HOURS - hours_connected)
 
     if time_until_update > 0:
-        status_msg = f"⏳ Waiting for data ({time_until_update:.1f}h remaining)"
+        status_msg = f"Waiting for data ({time_until_update:.1f}h remaining)"
     else:
-        status_msg = "✅ Data expected soon"
+        status_msg = "Data expected soon"
 
-    return topic, status_msg, "⏳ Waiting...", "⏳ Waiting...", "0", "📊 Pressure sensor sends data every 12 hours", "📊 No data received yet"
+    return topic, status_msg, "Waiting...", "Waiting...", "0", "Pressure sensor sends data every 12 hours", "No data received yet"
 
 # Excel download callback
 @app.callback(
@@ -4273,19 +4295,19 @@ def check_topics(n_clicks, flow_topic, cl_topic, pressure_topic, cl_type, sensor
             if data_age.total_seconds() <= 600:  # 10 minutes
                 remarks = parse_payload_and_get_remarks(rec["payload"])
                 if "YES" in remarks:
-                    flow_status = html.Span("✅ Communicating (Recent Data)", style={"color": "green", "fontWeight": "bold"})
+                    flow_status = html.Span("Communicating (Recent Data)", style={"color": "green", "fontWeight": "bold"})
                 else:
-                    flow_status = html.Span("❌ Not Communicating", style={"color": "red", "fontWeight": "bold"})
+                    flow_status = html.Span("Not Communicating", style={"color": "red", "fontWeight": "bold"})
             else:
                 # Data is older but still shows communication
                 remarks = parse_payload_and_get_remarks(rec["payload"])
                 if "YES" in remarks:
                     time_diff = data_age.total_seconds() / 60  # minutes
-                    flow_status = html.Span(f"✅ Communicating (Data from {rec['datetime'].strftime('%H:%M')} - {time_diff:.0f} min ago)", style={"color": "orange", "fontWeight": "bold"})
+                    flow_status = html.Span(f"Communicating (Data from {rec['datetime'].strftime('%H:%M')} - {time_diff:.0f} min ago)", style={"color": "orange", "fontWeight": "bold"})
                 else:
-                    flow_status = html.Span("❌ Not Communicating", style={"color": "red", "fontWeight": "bold"})
+                    flow_status = html.Span("Not Communicating", style={"color": "red", "fontWeight": "bold"})
         else:
-            flow_status = html.Span("⏳ Waiting for data... (Click Check Again)", style={"color": "orange", "fontWeight": "bold"})
+            flow_status = html.Span("Waiting for data... (Click Check Again)", style={"color": "orange", "fontWeight": "bold"})
 
     if sensor_selection and "cl" in sensor_selection and cl_topic:
         # Subscribe to the topic if not already subscribed
@@ -4298,19 +4320,19 @@ def check_topics(n_clicks, flow_topic, cl_topic, pressure_topic, cl_type, sensor
             if data_age.total_seconds() <= 600:  # 10 minutes
                 remarks = parse_payload_and_get_remarks(rec["payload"], cl_type)
                 if "YES" in remarks:
-                    cl_status = html.Span("✅ Communicating (Recent Data)", style={"color": "green", "fontWeight": "bold"})
+                    cl_status = html.Span("Communicating (Recent Data)", style={"color": "green", "fontWeight": "bold"})
                 else:
-                    cl_status = html.Span("❌ Not Communicating", style={"color": "red", "fontWeight": "bold"})
+                    cl_status = html.Span("Not Communicating", style={"color": "red", "fontWeight": "bold"})
             else:
                 # Data is older but still shows communication
                 remarks = parse_payload_and_get_remarks(rec["payload"], cl_type)
                 if "YES" in remarks:
                     time_diff = data_age.total_seconds() / 60  # minutes
-                    cl_status = html.Span(f"✅ Communicating (Data from {rec['datetime'].strftime('%H:%M')} - {time_diff:.0f} min ago)", style={"color": "orange", "fontWeight": "bold"})
+                    cl_status = html.Span(f"Communicating (Data from {rec['datetime'].strftime('%H:%M')} - {time_diff:.0f} min ago)", style={"color": "orange", "fontWeight": "bold"})
                 else:
-                    cl_status = html.Span("❌ Not Communicating", style={"color": "red", "fontWeight": "bold"})
+                    cl_status = html.Span("Not Communicating", style={"color": "red", "fontWeight": "bold"})
         else:
-            cl_status = html.Span("⏳ Waiting for data... (Click Check Again)", style={"color": "orange", "fontWeight": "bold"})
+            cl_status = html.Span("Waiting for data... (Click Check Again)", style={"color": "orange", "fontWeight": "bold"})
 
     if sensor_selection and "pressure" in sensor_selection and pressure_topic:
         # Subscribe to the topic if not already subscribed
@@ -4323,19 +4345,19 @@ def check_topics(n_clicks, flow_topic, cl_topic, pressure_topic, cl_type, sensor
             if data_age.total_seconds() <= 43200:  # 12 hours in seconds
                 remarks = parse_payload_and_get_remarks(rec["payload"], sensor_type="pressure")
                 if "YES" in remarks:
-                    pressure_status = html.Span("✅ Communicating (Recent Data)", style={"color": "green", "fontWeight": "bold"})
+                    pressure_status = html.Span("Communicating (Recent Data)", style={"color": "green", "fontWeight": "bold"})
                 else:
-                    pressure_status = html.Span("❌ Not Communicating", style={"color": "red", "fontWeight": "bold"})
+                    pressure_status = html.Span("Not Communicating", style={"color": "red", "fontWeight": "bold"})
             else:
                 # Data is older but still shows communication
                 remarks = parse_payload_and_get_remarks(rec["payload"], sensor_type="pressure")
                 if "YES" in remarks:
                     time_diff = data_age.total_seconds() / 3600  # hours
-                    pressure_status = html.Span(f"✅ Communicating (Data from {rec['datetime'].strftime('%H:%M')} - {time_diff:.1f}h ago)", style={"color": "orange", "fontWeight": "bold"})
+                    pressure_status = html.Span(f"Communicating (Data from {rec['datetime'].strftime('%H:%M')} - {time_diff:.1f}h ago)", style={"color": "orange", "fontWeight": "bold"})
                 else:
-                    pressure_status = html.Span("❌ Not Communicating", style={"color": "red", "fontWeight": "bold"})
+                    pressure_status = html.Span("Not Communicating", style={"color": "red", "fontWeight": "bold"})
         else:
-            pressure_status = html.Span("⏳ Waiting for data... (Click Check Again)", style={"color": "orange", "fontWeight": "bold"})
+            pressure_status = html.Span("Waiting for data... (Click Check Again)", style={"color": "orange", "fontWeight": "bold"})
 
     return flow_status, cl_status, pressure_status
 
@@ -4365,7 +4387,7 @@ def save_changes(n_clicks, table_data, session_data):
                 # Update the entry in database
                 success = update_entry_in_db(row)
                 if not success:
-                    return dbc.Alert(f"❌ Error updating entry with SR No: {sr_no}", color="danger")
+                    return dbc.Alert(f"Error updating entry with SR No: {sr_no}", color="danger")
 
                 # Log the activity
                 log_user_activity(username, "Update Entry", f"Updated entry SR No: {sr_no}")
@@ -4374,10 +4396,10 @@ def save_changes(n_clicks, table_data, session_data):
         global base_df
         base_df = load_combined_data()
 
-        return dbc.Alert("✅ Changes saved successfully! The main tables will update automatically.", color="success")
+        return dbc.Alert("Changes saved successfully! The main tables will update automatically.", color="success")
 
     except Exception as e:
-        return dbc.Alert(f"❌ Error saving changes: {str(e)}", color="danger")
+        return dbc.Alert(f"Error saving changes: {str(e)}", color="danger")
 
 @app.callback(
     Output("submit-status", "children"),
@@ -4585,11 +4607,11 @@ def submit_entry(n_clicks, status_filter, search_text, page_size, user_status_fi
                 user_table_data = []
                 user_table_columns = []
 
-            return dbc.Alert("✅ Entry submitted successfully! The new entry will now appear in the main tables.", color="success"), admin_table_data, admin_table_columns, user_table_data, user_table_columns
+            return dbc.Alert("Entry submitted successfully! The new entry will now appear in the main tables.", color="success"), admin_table_data, admin_table_columns, user_table_data, user_table_columns
         else:
-            return dbc.Alert("❌ Error saving entry to database.", color="danger"), [], [], [], []
+            return dbc.Alert("Error saving entry to database.", color="danger"), [], [], [], []
     except Exception as e:
-        return dbc.Alert(f"❌ Error submitting entry: {str(e)}", color="danger"), [], [], [], []
+        return dbc.Alert(f"Error submitting entry: {str(e)}", color="danger"), [], [], [], []
 
 # Manual reload callback for main data
 @app.callback(
@@ -4827,7 +4849,7 @@ def update_analysis(n, region, sensor_type, search_text, page_size,
     # Update active filter display
     region_display = region if region and region != "All" else "All Regions"
     sensor_display = sensor_name
-    active_filter_display = f"🌍 {region_display} | 📡 {sensor_display} | 🎯 {active_filter}"
+    active_filter_display = f"{region_display} | {sensor_display} | {active_filter}"
 
     # Update filter store with current state
     filter_store = {
