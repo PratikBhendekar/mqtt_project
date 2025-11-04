@@ -1,0 +1,7 @@
+dash
+plotly
+flask
+pandas
+paho-mqtt
+dash-bootstrap-components
+gunicorn
