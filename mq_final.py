@@ -50,11 +50,11 @@ from dash import Dash
 import dash_bootstrap_components as dbc
  
 # ================== DATABASE CONFIG ==================
-db_user = "postgres"
-db_password = "Pratik@123"
-db_host = "localhost"
+db_user = "mydb_hgmh_user"
+db_password = "J6Il09LrbvAKhaTF2ZnJ9G2I8A3NwYVa"
+db_host = "dpg-d45derv5r7bs73afhtng-a.oregon-postgres.render.com"
 db_port = "5432"
-db_name = "postgres"
+db_name = "mydb_hgmh"
 main_table_name = "JJJ_Site"
 new_entries_table_name = "JJM_New_Entries"
 user_login_table = "login_access"
