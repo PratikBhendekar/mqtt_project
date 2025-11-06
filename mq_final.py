@@ -1095,8 +1095,6 @@ app.index_string = '''
 </html>
 '''
 
-
-
 # Load and encode logo
 def load_logo(logo_path):
     if os.path.exists(logo_path):
@@ -2754,7 +2752,7 @@ main_page = html.Div([
                                         'filter_query': '{Topic For Flow Meter} != "" && {Topic For Flow Meter} != "nan" && {Flow} = "Returned to SI with comments" && {Communication Status} contains "YES"',
                                     },
                                     'backgroundColor': 'rgba(255, 65, 108, 0.25)',
-                                    'color': '#721c24',
+                                    'color": '#721c24',
                                     'fontWeight': 'bold'
                                 }
                             ],
