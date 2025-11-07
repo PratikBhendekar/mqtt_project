@@ -4686,20 +4686,27 @@ def update_analysis(n, region, sensor_type, search_text, page_size,
             table_data, table_columns, active_filter_display, filter_store)
 
 # ================== RUN APP ==================
+# Wrap Flask server with SecurityMiddleware (important for Render)
+from werkzeug.middleware.security import SecurityMiddleware
+app.server.wsgi_app = SecurityMiddleware(app.server.wsgi_app)
+
+# Expose the underlying Flask app to Gunicorn
 server = app.server   # 👈 required for Render / Gunicorn
 
 if __name__ == "__main__":
     # Auto-create the new entries table on startup
     create_new_entries_table()
 
-    # Fixed port (no auto-increment)
+    # Fixed port (for local testing)
     port = 8011
 
-    # Try to open the app in the default web browser
+    # Try to open the app in the default web browser (optional)
     try:
+        import webbrowser
         webbrowser.open(f"http://localhost:{port}")
     except Exception:
         pass
 
-    # Run the Dash app on the fixed port
-    app.run(debug=False, host='0.0.0.0', port=port)
+    # Run Dash app for local environment
+    app.run_server(debug=False, host='0.0.0.0', port=port)
+
