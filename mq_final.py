@@ -1183,7 +1183,8 @@ app.index_string = '''<!DOCTYPE html>
 '''
 
 # Wrap the app with security middleware
-app.wsgi_app = SecurityMiddleware(app.wsgi_app)
+app.server.wsgi_app = SecurityMiddleware(app.server.wsgi_app)
+
 
 # Load and encode logo
 def load_logo(logo_path):
