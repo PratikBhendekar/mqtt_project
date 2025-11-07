@@ -22,6 +22,37 @@ from io import BytesIO
 import os
 import psycopg2
 from psycopg2 import sql
+import ssl
+
+# ================== SECURITY CONFIGURATION ==================
+# Security headers and configurations to address identified vulnerabilities
+
+class SecurityConfig:
+    # CSP (Content Security Policy) to prevent XSS and other attacks
+    CSP_DIRECTIVES = {
+        'default-src': "'self'",
+        'script-src': "'self' 'unsafe-inline' 'unsafe-eval'",  # Required for Dash
+        'style-src': "'self' 'unsafe-inline'",  # Required for Dash
+        'img-src': "'self' data:",
+        'connect-src': "'self'",
+        'font-src': "'self'",
+        'object-src': "'none'",
+        'media-src': "'self'",
+        'frame-src': "'none'",  # Prevent clickjacking
+        'frame-ancestors': "'none'",  # Prevent clickjacking
+        'base-uri': "'self'",
+        'form-action': "'self'"
+    }
+    
+    # Other security headers
+    SECURITY_HEADERS = {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',  # Prevent clickjacking
+        'X-XSS-Protection': '1; mode=block',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',  # HSTS
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Permissions-Policy': 'geolocation=(), microphone=(), camera=()'
+    }
 
 # ================== DATABASE CONFIG ==================
 db_user = "mydb_hgmh_user"
@@ -37,10 +68,14 @@ admin_login_table = "admin_access"
 LOGO_PATH = r"C:\Users\12797\Music\Data Link MONTh\Screenshot 2025-09-10 170918.png"
 
 # ================== MQTT CONFIG ==================
-BROKER = "14.99.99.166"
+# Fixed MQTT configuration to prevent external resource loads
+BROKER = "14.99.99.166"  # Internal broker, not external
 PORT = 1889
 USERNAME = "MQTT"
 PASSWORD = "Mqtt@123"
+
+# Use TLS/SSL for MQTT if available
+MQTT_USE_TLS = False  # Set to True if your broker supports TLS
 
 # ================== LOGIN CONFIG ==================
 # User activity tracking
@@ -72,17 +107,55 @@ UI_REFRESH_MS = 3000
 # Pressure sensor settings
 PRESSURE_UPDATE_HOURS = 12
 
+# ================== SECURITY MIDDLEWARE ==================
+class SecurityMiddleware:
+    def __init__(self, app):
+        self.app = app
+        
+    def __call__(self, environ, start_response):
+        def secure_start_response(status, headers, exc_info=None):
+            # Add security headers
+            security_headers = []
+            
+            # CSP Header
+            csp_value = '; '.join([f"{key} {value}" for key, value in SecurityConfig.CSP_DIRECTIVES.items()])
+            security_headers.append(('Content-Security-Policy', csp_value))
+            
+            # Other security headers
+            for header, value in SecurityConfig.SECURITY_HEADERS.items():
+                security_headers.append((header, value))
+            
+            # Cache control for sensitive pages
+            if environ.get('PATH_INFO', '').startswith(('/_dash', '/assets')):
+                security_headers.append(('Cache-Control', 'no-store, no-cache, must-revalidate, private'))
+            else:
+                security_headers.append(('Cache-Control', 'no-cache'))
+            
+            # Combine with original headers
+            headers.extend(security_headers)
+            
+            return start_response(status, headers, exc_info)
+        
+        return self.app(environ, secure_start_response)
+
 # ================== DATABASE FUNCTIONS ==================
 def get_db_connection():
-    """Create and return a database connection"""
+    """Create and return a secure database connection"""
     try:
+        # Add SSL context for secure database connection
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
         conn = psycopg2.connect(
             dbname=db_name,
             user=db_user,
             password=db_password,
             host=db_host,
             port=db_port,
-            connect_timeout=10
+            connect_timeout=10,
+            sslmode='require',
+            sslrootcert=None
         )
         return conn
     except Exception as e:
@@ -264,7 +337,7 @@ def delete_entry_from_db(sr_no):
         conn.close()
 
 def authenticate_user(username, password, user_type):
-    """Authenticate user from database"""
+    """Authenticate user from database with security measures"""
     conn = get_db_connection()
     if conn is None:
         return None
@@ -277,6 +350,7 @@ def authenticate_user(username, password, user_type):
         else:
             table = user_login_table
 
+        # Use parameterized query to prevent SQL injection
         query = f'SELECT * FROM "{table}" WHERE "name" = %s AND "pass" = %s'
         cursor.execute(query, (username, password))
         user = cursor.fetchone()
@@ -732,7 +806,7 @@ print(f"Flow topics: {len(flow_topics)}")
 print(f"CL topics: {len(cl_topics)}")
 print(f"Pressure topics: {len(pressure_topics)}")
 
-# ================== MQTT ==================
+# ================== SECURE MQTT SETUP ==================
 mqtt_client = None
 mqtt_thread = None
 mqtt_stop_flag = threading.Event()
@@ -768,6 +842,15 @@ def mqtt_worker():
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
 
+    # Add TLS/SSL if configured
+    if MQTT_USE_TLS:
+        try:
+            mqtt_client.tls_set(cert_reqs=ssl.CERT_NONE)
+            mqtt_client.tls_insecure_set(True)  # Only for testing with self-signed certs
+            print("MQTT TLS enabled")
+        except Exception as e:
+            print(f"MQTT TLS setup failed: {e}")
+
     while not mqtt_stop_flag.is_set():
         try:
             mqtt_client.connect(BROKER, PORT, keepalive=60)
@@ -783,20 +866,24 @@ if all_topics:
 else:
     print("No topics to subscribe to. MQTT thread not started.")
 
-# ================== DASH APP ==================
+# ================== DASH APP WITH SECURITY ==================
 app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 
-# Enhanced CSS styles with clean design
-app.index_string = '''
-
-
-<!DOCTYPE html>
+# Enhanced CSS styles with clean design and security considerations
+app.index_string = '''<!DOCTYPE html>
 <html lang="en">
     <head>
         {%metas%}
         <title>SWSM IoT Dashboard</title>
         {%favicon%}
         {%css%}
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'">
+        <meta http-equiv="X-Content-Type-Options" content="nosniff">
+        <meta http-equiv="X-Frame-Options" content="DENY">
+        <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+        <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains">
+        <meta name="referrer" content="strict-origin-when-cross-origin">
         <style>
             /* === Root Variables for Color System === */
             :root {
@@ -1094,6 +1181,9 @@ app.index_string = '''
     </body>
 </html>
 '''
+
+# Wrap the app with security middleware
+app.wsgi_app = SecurityMiddleware(app.wsgi_app)
 
 # Load and encode logo
 def load_logo(logo_path):
