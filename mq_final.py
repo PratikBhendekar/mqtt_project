@@ -4687,8 +4687,7 @@ def update_analysis(n, region, sensor_type, search_text, page_size,
 
 # ================== RUN APP ==================
 # Wrap Flask server with SecurityMiddleware (important for Render)
-from werkzeug.middleware.security import SecurityMiddleware
-app.server.wsgi_app = SecurityMiddleware(app.server.wsgi_app)
+
 
 # Expose the underlying Flask app to Gunicorn
 server = app.server   # 👈 required for Render / Gunicorn
